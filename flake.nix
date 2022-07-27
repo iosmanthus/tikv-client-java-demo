@@ -15,7 +15,7 @@
         {
           devShell = pkgs.mkShell {
             hardeningDisable = [ "all" ];
-            buildInputs = with pkgs;[ jdk8 maven ];
+            buildInputs = with pkgs;[ jdk8 maven gcc ];
             shellHook = ''
               export JAVA_HOME=${pkgs.jdk8}
               PATH="${pkgs.jdk8}/bin:$PATH"
