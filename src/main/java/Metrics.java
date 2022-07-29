@@ -27,20 +27,19 @@ public class Metrics {
     conf.setRawKVBatchWriteSlowLogInMS(50);
     conf.setCircuitBreakEnable(false);
 
-    ExecutorService executorService = Executors.newFixedThreadPool(16);
+    ExecutorService executorService = Executors.newFixedThreadPool(64);
 
     try (TiSession session = TiSession.create(conf)) {
       try (RawKVClient client = session.createRawClient()) {
-        for (int t = 0; t < 8; t++) {
+        for (int t = 0; t < 64; t++) {
           int finalT = t;
           executorService.submit(() -> {
             for (int i = 0; i < 100000000; i++) {
               try {
-                client.put(ByteString.copyFromUtf8("key@" + i), ByteString.copyFromUtf8("value"));
                 client.get(ByteString.copyFromUtf8("key@" + i));
-                logger.info(finalT + " put " + i);
+                logger.info(finalT + " get " + i);
               } catch (Exception e) {
-                logger.error(e.toString());
+                logger.error("got error {}", e.toString());
               }
               try {
                 Thread.sleep(100);
