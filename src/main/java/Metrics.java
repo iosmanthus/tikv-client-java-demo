@@ -1,3 +1,5 @@
+import java.util.ArrayList;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import org.slf4j.Logger;
@@ -12,9 +14,11 @@ public class Metrics {
   private static final Logger logger = LoggerFactory.getLogger(Metrics.class);
 
   public static void main(String[] args) throws Exception {
-    TiConfiguration conf = TiConfiguration.createRawDefault();
+    TiConfiguration conf = TiConfiguration.createRawDefault(
+        "127.0.0.1:2379,127.0.0.1:2382,127.0.0.1:2384");
     conf.setApiVersion(ApiVersion.V2);
     conf.setEnableAtomicForCAS(true);
+    conf.setEnableGrpcForward(true);
     conf.setTimeout(150);
     conf.setForwardTimeout(200);
     conf.setRawKVReadTimeoutInMS(400);
@@ -26,16 +30,26 @@ public class Metrics {
     conf.setRawKVBatchReadSlowLogInMS(50);
     conf.setRawKVBatchWriteSlowLogInMS(50);
     conf.setCircuitBreakEnable(false);
+    conf.setMetricsEnable(true);
+    conf.setMetricsPort(3141);
 
     ExecutorService executorService = Executors.newFixedThreadPool(64);
 
     try (TiSession session = TiSession.create(conf)) {
+      CountDownLatch latch = new CountDownLatch(64);
+      ArrayList<byte[]> keys = new ArrayList<>();
+      for (int i = 0; i < 1000; i++) {
+        keys.add(String.format("key@%d", i).getBytes());
+      }
+      session.splitRegionAndScatter(keys);
       try (RawKVClient client = session.createRawClient()) {
         for (int t = 0; t < 64; t++) {
           int finalT = t;
           executorService.submit(() -> {
             for (int i = 0; i < 100000000; i++) {
               try {
+                client.put(ByteString.copyFromUtf8(String.format("key@%d", i)),
+                    ByteString.copyFromUtf8(String.format("value@%d", i)));
                 client.get(ByteString.copyFromUtf8("key@" + i));
                 logger.info(finalT + " get " + i);
               } catch (Exception e) {
@@ -46,8 +60,10 @@ public class Metrics {
               } catch (Exception ignore) {
               }
             }
+            latch.countDown();
           });
         }
+        latch.await();
       }
     }
   }
